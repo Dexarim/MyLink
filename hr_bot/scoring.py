@@ -52,18 +52,72 @@ def base_similarity_score(vacancy: Dict, resume: Dict) -> Dict:
 
 
 
-# === Анализ несоответствий ===
 def detect_gaps(vacancy: Dict, resume: Dict, scoring: Dict) -> List[Dict]:
+    """
+    Анализирует расхождения между вакансией и резюме.
+    Использует как численные метрики (из scoring), так и прямые проверки данных.
+    """
     gaps = []
-    d = scoring["details"]
+    d = scoring.get("details", {})
 
-    if vacancy["город"].lower() != resume["город"].lower():
-        gaps.append({"type": "relocation", "reason": f"вакансия в {vacancy['город']}, а кандидат в {resume['город']}"})
+    # === 1. Город ===
+    if vacancy.get("город") and resume.get("город"):
+        if vacancy["город"].lower() != resume["город"].lower():
+            gaps.append({
+                "type": "relocation",
+                "reason": f"вакансия в {vacancy['город']}, а кандидат проживает в {resume['город']}"
+            })
 
-    if d["exp_ratio"] < 0.7:
-        gaps.append({"type": "training", "reason": f"опыт меньше требуемого"})
+    # === 2. Опыт работы ===
+    # Учитываем как прямое значение, так и числовой показатель exp_ratio
+    if d.get("exp_ratio", 1.0) < 0.7 or resume.get("опыт_лет", 0) < vacancy.get("требуемый_опыт", 0):
+        gaps.append({
+            "type": "training",
+            "reason": "опыт кандидата меньше требуемого по вакансии"
+        })
 
-    if d["edu_sim"] < 0.6:
-        gaps.append({"type": "education", "reason": "образование не полностью совпадает"})
+    # === 3. Образование ===
+    if d.get("edu_sim", 1.0) < 0.6 or (
+        vacancy.get("образование") and resume.get("образование") and
+        vacancy["образование"].lower() not in resume["образование"].lower()
+    ):
+        gaps.append({
+            "type": "education",
+            "reason": "уровень или профиль образования отличается от требований"
+        })
+
+    # === 4. Зарплата ===
+    if resume.get("зарплата") and vacancy.get("зарплата"):
+        if resume["зарплата"] > vacancy["зарплата"]:
+            gaps.append({
+                "type": "salary",
+                "reason": f"ожидания по зарплате ({resume['зарплата']}₸) выше предложенной ({vacancy['зарплата']}₸)"
+            })
+
+    # === 5. Языки ===
+    if "языки" in vacancy and "языки" in resume:
+        missing_langs = [lang for lang in vacancy["языки"] if lang not in resume["языки"]]
+        if missing_langs:
+            gaps.append({
+                "type": "language",
+                "reason": f"отсутствуют требуемые языки: {', '.join(missing_langs)}",
+                "missing_langs": ", ".join(missing_langs)
+            })
+
+    # === 6. Тип занятости ===
+    if vacancy.get("занятость") and resume.get("занятость"):
+        if vacancy["занятость"].lower() != resume["занятость"].lower():
+            gaps.append({
+                "type": "employment",
+                "reason": f"вакансия требует {vacancy['занятость']}, а кандидат предпочитает {resume['занятость']}"
+            })
+
+    # === 7. Мотивация ===
+    if not resume.get("мотивация") or len(resume["мотивация"].strip()) < 30:
+        gaps.append({
+            "type": "motivation",
+            "reason": "в резюме отсутствует информация о мотивации или профессиональных целях"
+        })
 
     return gaps
+
