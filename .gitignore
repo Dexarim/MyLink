@@ -1,0 +1,38 @@
+# Игнорируем виртуальное окружение
+venv/
+
+
+# Игнорируем файл с переменными окружения
+.env
+core/config/resolute-casing-396007-7681e01244be.json
+
+# Игнорируем кэш Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Игнорируем кэш pip и сборки
+pip-wheel-metadata/
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Игнорируем кэш Jupyter (если используешь)
+.ipynb_checkpoints/
+
+# Игнорируем кэш pytest
+.pytest_cache/
+
+# Игнорируем mypy кэш
+.mypy_cache/
+
+# Игнорируем IDE-шные файлы (VSCode, PyCharm)
+.vscode/
+.idea/
+
+# Игнорируем DockerFile
+
+.dockerignore
+Dockerfile
