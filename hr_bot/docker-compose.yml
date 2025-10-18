@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  backend:
+    build: .
+    container_name: mylink_api
+    ports:
+      - "8000:8000"
+    environment:
+      - EMBEDDINGS_MODE=local
+      - LLM_PROVIDER=gemini
+      - LLM_MODEL=gemini-1.5-flash
+      - GOOGLE_API_KEY=${}
+      - DEBERTA_MODEL=microsoft/deberta-v3-base-mnli
+      - HF_HOME=/root/.cache/huggingface
+    volumes:
+      - .:/app
+      - huggingface_cache:/root/.cache/huggingface
+
+volumes:
+  huggingface_cache:
