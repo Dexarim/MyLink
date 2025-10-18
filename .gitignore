@@ -1,10 +1,9 @@
 # Игнорируем виртуальное окружение
 venv/
-
+AIAssistent/
 
 # Игнорируем файл с переменными окружения
 .env
-core/config/resolute-casing-396007-7681e01244be.json
 
 # Игнорируем кэш Python
 __pycache__/
