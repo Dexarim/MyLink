@@ -4,7 +4,7 @@ from typing import Dict
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
 
-DEFAULT_MODEL = os.getenv("DEBERTA_MODEL", "microsoft/deberta-v3-base-mnli")
+DEFAULT_MODEL = "microsoft/deberta-v3-base"
 
 _tokenizer = None
 _model = None

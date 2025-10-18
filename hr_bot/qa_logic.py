@@ -4,7 +4,7 @@ from typing import Dict, List, Any
 from embeddings import embed_text, cosine_sim
 
 
-def generate_followup_question(gap: Dict, vacancy: Dict, resume: Dict, llm_client=None) -> str:
+async def generate_followup_question(gap: Dict, vacancy: Dict, resume: Dict, llm_client=None) -> str:
     """
     Генерация уточняющего вопроса по gap.
     Если есть llm_client → используем LLM, иначе — шаблоны.
@@ -77,7 +77,7 @@ def generate_followup_question(gap: Dict, vacancy: Dict, resume: Dict, llm_clien
             f" чтобы уточнить: {gap.get('reason','несоответствие')}. "
             'Ответ начни c "Q:".'
         )
-        return llm_client.generate(prompt)
+        return await llm_client.generate(prompt)
 
     return "Можете уточнить этот момент подробнее?"
 

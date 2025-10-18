@@ -6,14 +6,14 @@ from qa_logic import generate_followup_question, integrate_followup
 
 if __name__ == "__main__":
     vacancy = {
-        "city": "Астана",
-        "experience": 5,
-        "post": "Python developer",
-        "education": "высшее специальное",
-        "languages": ["английский"],
-        "salary": 800000,
+        "city": "Кинишма",
+        "experience": 98,
+        "post": "Электрик-наладчик",
+        "education": "Диплом о среднем профессиональном образовании",
+        "languages": ["русский"],
+        "salary": 1000000,
         "busyness": "полная",
-        "skills": ["python", "fastapi", "numpy"]
+        "skills": ["Сварщик", "Пайка", "Чтение чертежей"]
     }
 
     resume = {
@@ -41,10 +41,10 @@ if __name__ == "__main__":
     followups = []
     for g in gaps:
         q = generate_followup_question(g, vacancy, resume, llm)
-        print("🤖", q)
-        ans = input("🧑 Ваш ответ: ").strip()
+        print("", q)
+        ans = input("Ваш ответ: ").strip()
         followups.append({"gap": g, "answer": ans})
 
     if followups:
         final = integrate_followup(vacancy, resume, base, followups)
-        print("✅ Итоговая оценка:", final)
+        print("Итоговая оценка:", final)

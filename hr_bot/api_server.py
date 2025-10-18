@@ -1,115 +1,130 @@
 # api_server.py
 import os
-from fastapi import FastAPI, Body, HTTPException
-from fastapi.responses import JSONResponse
+import asyncio
+from typing import List, Dict, Optional
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from llm_client import LLMClient
 from scoring import base_similarity_score, detect_gaps
-from qa_logic import generate_followup_question
-from qa_logic import integrate_followup
-from deberta_analyzer import analyze_text
-from embeddings import embed_text, cosine_sim
+from qa_logic import generate_followup_question, integrate_followup
 
-app = FastAPI(title="HR Analyzer API", version="1.0.0")
+app = FastAPI(
+    title="HR Match Analyzer API",
+    description="Асинхронное API для анализа резюме и вакансий с помощью DeBERTa, эмбеддингов и LLM.",
+    version="1.1.0",
+)
 
-# === Инициализация LLM ===
-LLM = LLMClient(
-    provider=os.getenv("LLM_PROVIDER", "gemini"),
-    model=os.getenv("LLM_MODEL", "gemini-1.5-flash"),
-    api_key=os.getenv("GOOGLE_API_KEY"),
-    base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+# ✅ Разрешаем CORS-запросы от любых фронтов (можно ограничить позже)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # или ["http://localhost:3000"] если React
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
-@app.post("/llm/")
-async def llm_generate(payload: dict = Body(...)):
-    try:
-        prompt = payload.get("prompt", "")
-        if not prompt:
-            raise HTTPException(400, "prompt is required")
-        return {"response": LLM.generate(prompt)}
-    except Exception as e:
-        raise HTTPException(500, str(e))
+# ---------------------- МОДЕЛИ ----------------------
+class Vacancy(BaseModel):
+    city: str
+    experience: float
+    post: str
+    education: str
+    languages: List[str]
+    salary: float
+    busyness: str
 
 
-@app.post("/embeddings/similarity/")
-async def embeddings_similarity(payload: dict = Body(...)):
-    try:
-        t1 = payload.get("text1", "")
-        t2 = payload.get("text2", "")
-        sim = cosine_sim(embed_text(t1), embed_text(t2))
-        return {"similarity": sim}
-    except Exception as e:
-        raise HTTPException(500, str(e))
+class Resume(BaseModel):
+    city: str
+    experience: float
+    post: str
+    education: str
+    languages: List[str]
+    salary: float
+    busyness: str
+    мотивация: Optional[str] = None
+    skills: Optional[List[str]] = []
 
 
-@app.post("/ml/deberta/")
-async def ml_deberta(payload: dict = Body(...)):
-    try:
-        resume_text = payload.get("resume", "")
-        job_text = payload.get("vacancy", "")
-        result = analyze_text(resume_text, job_text)
-        return result
-    except Exception as e:
-        raise HTTPException(500, str(e))
+class FollowupAnswer(BaseModel):
+    gap: Dict
+    answer: str
 
 
-@app.post("/score/")
-async def score(payload: dict = Body(...)):
-    try:
-        vacancy = payload["vacancy"]
-        resume  = payload["resume"]
-        base = base_similarity_score(vacancy, resume)
-        return base
-    except KeyError:
-        raise HTTPException(400, "payload must contain 'vacancy' and 'resume'")
-    except Exception as e:
-        raise HTTPException(500, str(e))
+# ---------------------- LLM CLIENT ----------------------
+llm = LLMClient(
+    provider=os.getenv("LLM_PROVIDER", "gemini"),
+    model=os.getenv("LLM_MODEL", "gemini-1.5-flash"),
+    api_key=os.getenv("GOOGLE_API_KEY"),
+)
 
 
-@app.post("/analyze/")
-async def analyze_full(payload: dict = Body(...)):
+# ---------------------- ENDPOINTS ----------------------
+@app.get("/")
+async def index():
+    return {
+        "message": "🚀 HR Match Analyzer API активен",
+        "endpoints": ["/analyze/base", "/analyze/followup", "/analyze/final"],
+    }
+
+
+@app.post("/analyze/base")
+async def analyze_base(vacancy: Vacancy, resume: Resume):
     """
-    Комбо-эндпоинт:
-    - базовый скоринг
-    - детект гэпов
-    - генерация вопросов (LLM/шаблоны)
-    - DeBERTa-анализ соответствия
-    Возвращает всё в одном JSON.
+    Шаг 1️⃣ — базовая оценка схожести и определение несоответствий.
     """
     try:
-        vacancy = payload["vacancy"]
-        resume  = payload["resume"]
-
-        # 1) базовый скоринг
-        base = base_similarity_score(vacancy, resume)
-
-        # 2) гэпы
-        gaps = detect_gaps(vacancy, resume, base)
-
-        # 3) вопросы
-        questions = [generate_followup_question(g, vacancy, resume, LLM) for g in gaps]
-
-        # 4) DeBERTa
-        deberta_result = analyze_text(str(resume), str(vacancy))
-
-        # 5) итоговая рекомендация (простая логика)
-        rec = "Кандидат не подходит"
-        score_val = base["base_score"]
-        if score_val >= 75:
-            rec = "Кандидат подходит"
-        elif score_val >= 50:
-            rec = "Возможен найм после обучения/уточнений"
-
-        return JSONResponse({
-            "base_score": base["base_score"],
-            "details": base["details"],
-            "gaps": gaps,
-            "questions": questions,
-            "deberta_result": deberta_result,
-            "recommendation": rec
-        })
-    except KeyError:
-        raise HTTPException(400, "payload must contain 'vacancy' and 'resume'")
+        base = base_similarity_score(vacancy.dict(), resume.dict())
+        gaps = detect_gaps(vacancy.dict(), resume.dict(), base)
+        return {"base_score": base, "gaps": gaps}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/analyze/followup")
+async def analyze_followup(vacancy: Vacancy, resume: Resume):
+    """
+    Шаг 2️⃣ — генерация уточняющих вопросов по найденным несовпадениям.
+    """
+    try:
+        base = base_similarity_score(vacancy.dict(), resume.dict())
+        gaps = detect_gaps(vacancy.dict(), resume.dict(), base)
+
+        async def _generate_all():
+            results = []
+            for gap in gaps:
+                q = await generate_followup_question(gap, vacancy.dict(), resume.dict(), llm)
+                results.append({"gap": gap, "question": q})
+            return results
+
+        questions = await _generate_all()
+        return {"questions": questions, "count": len(questions)}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка генерации вопросов: {e}")
+
+
+@app.post("/analyze/final")
+async def analyze_final(vacancy: Vacancy, resume: Resume, followups: List[FollowupAnswer]):
+    """
+    Шаг 3️⃣ — обработка ответов кандидата и пересчёт итогового скора.
+    """
+    try:
+        base = base_similarity_score(vacancy.dict(), resume.dict())
+        # выполнение CPU-bound задачи в отдельном потоке
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None, lambda: integrate_followup(vacancy.dict(), resume.dict(), base, [f.dict() for f in followups])
+        )
+        return {"final_score": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка финального анализа: {e}")
+
+
+# ---------------------- ЗАПУСК ----------------------
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("api_server:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=True)
