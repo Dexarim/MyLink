@@ -1,6 +1,7 @@
 # Игнорируем виртуальное окружение
 venv/
 AIAssistent/
+Docker/
 
 # Игнорируем файл с переменными окружения
 .env
@@ -32,6 +33,6 @@ dist/
 .idea/
 
 # Игнорируем DockerFile
-
+Docker/
 .dockerignore
 Dockerfile
