@@ -1,49 +1,80 @@
 """
-Прототип системы релевантности с follow-up через LLM (Mistral)
-Требования:
-- python 3.8
-- sentence-transformers
-- transformers (если используешь локальный mistral)
-- rapidfuzz (опционально)
-- requests / huggingface_hub / openai (в зависимости от варианта запуска LLM)
-
-Заменяй ID моделей и ключи на свои.
+Интерактивная версия системы релевантности с follow-up (Mistral/Ollama + эмбеддинги)
+После анализа резюме бот задаёт вопросы в консоли, а пользователь отвечает вручную.
 """
 
-import re
 import json
-from typing import Dict, List, Tuple, Any
-
-# Для эмбеддингов
-from sentence_transformers import SentenceTransformer, util
+import requests
 import numpy as np
+from typing import Dict, List, Any
+from functools import lru_cache
+from sentence_transformers import SentenceTransformer, util
 
-# Для локального/инференс-запроса к Mistral:
-# Вариант A: transformers (локально, если модель доступна)
-# from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
-
-# Вариант B: вызов внешнего inference API (Hugging Face / OpenAI) — оставлю шаблон ниже.
-
-# === Инициализация эмбеддингов (один раз при старте) ===
-EMB_MODEL = SentenceTransformer("all-MiniLM-L6-v2")  # лёгкая и быстрая модель
+# === Инициализация модели эмбеддингов ===
+EMB_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+EMB_DIM = EMB_MODEL.get_sentence_embedding_dimension()
 
 
 # === Утилиты ===
-def cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
-    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+def safe_float(value, default=0.0):
+    try:
+        if value is None or (isinstance(value, str) and value.strip() == ""):
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def normalize_vec(vec: np.ndarray) -> np.ndarray:
+    norm = np.linalg.norm(vec)
+    if norm == 0:
+        return vec
+    return vec / (norm + 1e-12)
 
 
 def embed_text(text: str) -> np.ndarray:
-    return EMB_MODEL.encode(text, convert_to_numpy=True)
+    if not text:
+        return np.zeros(EMB_DIM, dtype=float)
+    emb = EMB_MODEL.encode(text, convert_to_numpy=True)
+    return normalize_vec(emb)
 
 
-# === Начальная функция оценки (без follow-up) ===
-def base_similarity_score(vacancy: Dict, resume: Dict, embeddings_cache: Dict = None) -> Dict:
-    """
-    Возвращает dict с:
-      - base_score (0..100)
-      - компоненты с деталями (job_sim, edu_sim, city_match, exp_ratio и т.д.)
-    """
+def cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
+    if a is None or b is None:
+        return 0.0
+    if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
+        return 0.0
+    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+
+# === Клиент для Mistral/Ollama ===
+class MistralClient:
+    def __init__(self, model="mistral", base_url="http://localhost:11434"):
+        self.model = model
+        self.base_url = base_url.rstrip("/")
+
+    @lru_cache(maxsize=128)
+    def generate(self, prompt: str) -> str:
+        try:
+            resp = requests.post(
+                f"{self.base_url}/api/generate",
+                json={"model": self.model, "prompt": prompt},
+                stream=True,
+                timeout=30
+            )
+            text = ""
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                data = json.loads(line.decode("utf-8"))
+                text += data.get("response", "")
+            return text.strip()
+        except Exception as e:
+            return f"[Ошибка Mistral: {e}]"
+
+
+# === Расчёт базовой релевантности ===
+def base_similarity_score(vacancy: Dict, resume: Dict) -> Dict:
     weights = {
         "город": 0.1,
         "опыт": 0.25,
@@ -54,47 +85,19 @@ def base_similarity_score(vacancy: Dict, resume: Dict, embeddings_cache: Dict = 
         "занятость": 0.05
     }
 
-    # город
-    city_match = 1.0 if vacancy.get("город", "").strip().lower() == resume.get("город", "").strip().lower() else 0.0
+    city_match = 1.0 if vacancy["город"].lower() == resume["город"].lower() else 0.0
+    exp_ratio = min(safe_float(resume["опыт"]) / safe_float(vacancy["опыт"], 1.0), 1.0)
+    salary_match = 1.0 if safe_float(resume["зарплата"]) <= safe_float(vacancy["зарплата"]) else 0.8
 
-    # опыт
-    vac_exp = float(vacancy.get("опыт", 0))
-    res_exp = float(resume.get("опыт", 0))
-    exp_ratio = min(res_exp / max(1e-6, vac_exp), 1.0) if vac_exp > 0 else 1.0
+    job_sim = cosine_sim(embed_text(vacancy["должность"]), embed_text(resume["должность"]))
+    edu_sim = cosine_sim(embed_text(vacancy["образование"]), embed_text(resume["образование"]))
 
-    # зарплата
-    res_salary = float(resume.get("зарплата", 0))
-    vac_salary = float(vacancy.get("зарплата", 0))
-    salary_match = 1.0 if res_salary <= vac_salary else max(0.0, vac_salary / res_salary)  # простая логика
+    langs_v = set(vacancy["языки"])
+    langs_r = set(resume["языки"])
+    langs_match = len(langs_v & langs_r) / len(langs_v) if langs_v else 1.0
 
-    # языки
-    vac_langs = [l.lower() for l in vacancy.get("языки", [])]
-    res_langs = [l.lower() for l in resume.get("языки", [])]
-    langs_match = len(set(vac_langs) & set(res_langs)) / max(1, len(vac_langs))
+    employment_match = 1.0 if vacancy["занятость"] == resume["занятость"] else 0.0
 
-    # занятость
-    employment_match = 1.0 if vacancy.get("занятость") == resume.get("занятость") else 0.0
-
-    # должность и образование — через эмбеддинги
-    # кэширование эмбеддингов (чтобы не считать повторно)
-    if embeddings_cache is None:
-        embeddings_cache = {}
-    def get_emb(key, text):
-        if text is None:
-            return np.zeros(384)
-        if key not in embeddings_cache:
-            embeddings_cache[key] = embed_text(text)
-        return embeddings_cache[key]
-
-    job_emb_v = get_emb("vac_job:" + vacancy.get("должность",""), vacancy.get("должность",""))
-    job_emb_r = get_emb("res_job:" + resume.get("должность",""), resume.get("должность",""))
-    job_sim = cosine_sim(job_emb_v, job_emb_r)
-
-    edu_emb_v = get_emb("vac_edu:" + vacancy.get("образование",""), vacancy.get("образование",""))
-    edu_emb_r = get_emb("res_edu:" + resume.get("образование",""), resume.get("образование",""))
-    edu_sim = cosine_sim(edu_emb_v, edu_emb_r)
-
-    # итоговый score (0..100)
     score = (
         city_match * weights["город"] +
         exp_ratio * weights["опыт"] +
@@ -109,203 +112,99 @@ def base_similarity_score(vacancy: Dict, resume: Dict, embeddings_cache: Dict = 
         "base_score": round(score, 2),
         "details": {
             "city_match": city_match,
-            "exp_ratio": round(exp_ratio, 2),
-            "job_sim": round(job_sim, 3),
-            "edu_sim": round(edu_sim, 3),
-            "langs_match": round(langs_match, 3),
-            "salary_match": round(salary_match, 3),
+            "exp_ratio": exp_ratio,
+            "job_sim": job_sim,
+            "edu_sim": edu_sim,
+            "langs_match": langs_match,
+            "salary_match": salary_match,
             "employment_match": employment_match
-        },
-        "embeddings_cache": embeddings_cache
+        }
     }
 
 
-# === Детектор gaps / триггеров для follow-up ===
+# === Анализ несоответствий ===
 def detect_gaps(vacancy: Dict, resume: Dict, scoring: Dict) -> List[Dict]:
-    """
-    Возвращает список задач/вопросов, которые нужно задать кандидату.
-    Каждый элемент: {"type": "relocation"|"training"|"salary_negotiation"|..., "reason": "..."}
-    """
     gaps = []
-    details = scoring["details"]
+    d = scoring["details"]
 
-    # 1) город != вакансия -> relocation вопрос (если вакансии не remote)
-    if vacancy.get("город") and resume.get("город") and vacancy.get("город").strip().lower() != resume.get("город").strip().lower():
-        # если вакансия remote — пропускаем
-        if vacancy.get("занятость") != "удаленно" and not vacancy.get("remote_allowed", False):
-            gaps.append({"type": "relocation", "reason": f"вакансия в {vacancy.get('город')}, кандидат в {resume.get('город')}"})
+    if vacancy["город"].lower() != resume["город"].lower():
+        gaps.append({"type": "relocation", "reason": f"вакансия в {vacancy['город']}, а кандидат в {resume['город']}"})
 
-    # 2) опыт значительно меньше требуемого (например, менее 70%)
-    if details["exp_ratio"] < 0.7:
-        gaps.append({"type": "training", "reason": f"опыт {resume.get('опыт')} лет при требуемых {vacancy.get('опыт')}"})
+    if d["exp_ratio"] < 0.7:
+        gaps.append({"type": "training", "reason": f"опыт меньше требуемого"})
 
-    # 3) зарплатные ожидания выше вакансии более чем на 15%
-    res_sal = float(resume.get("зарплата", 0))
-    vac_sal = float(vacancy.get("зарплата", 0))
-    if res_sal > 0 and vac_sal > 0 and res_sal > vac_sal * 1.15:
-        gaps.append({"type": "salary", "reason": f"ожидания {res_sal} > оффер {vac_sal}"})
-
-    # 4) языки: если вакансии нужен язык, которого нет в резюме
-    req_langs = set([l.lower() for l in vacancy.get("языки", [])])
-    res_langs = set([l.lower() for l in resume.get("языки", [])])
-    missing = list(req_langs - res_langs)
-    if missing:
-        gaps.append({"type": "languages", "reason": f"отсутствует язык(и): {', '.join(missing)}"})
+    if d["edu_sim"] < 0.6:
+        gaps.append({"type": "education", "reason": "образование не полностью совпадает"})
 
     return gaps
 
 
-# === Генерация вопроса через LLM (Mistral) ===
-def generate_followup_question(gap: Dict, vacancy: Dict, resume: Dict, llm_client: Any = None) -> str:
-    """
-    Возвращает формулировку вопроса, которую нужно задать кандидату.
-    llm_client — объект/функция для вызова Mistral; можно подставить свой wrapper.
-    Если llm_client отсутствует, используем шаблоны.
-    """
-    typ = gap["type"]
-    # шаблоны (простые)
+# === Генерация вопросов ===
+def generate_followup_question(gap, vacancy, resume, llm_client=None):
     templates = {
-        "relocation": (
-            "Вакансия расположена в {vac_city}, а в вашем резюме указан город {res_city}. "
-            "Готовы ли вы переехать в {vac_city} или рассматриваете удалённую работу?"
-        ),
-        "training": (
-            "В описании вакансии требуется ~{vac_exp} лет опыта, у вас указано {res_exp} лет. "
-            "Готовы ли вы пройти обучение/менторство и работать в роли с частичной поддержкой?"
-        ),
-        "salary": (
-            "Ваши зарплатные ожидания — {res_sal}, а в вакансии указано {vac_sal}. Готовы ли вы обсуждать зарплату?"
-        ),
-        "languages": (
-            "В вакансии требуется знание {req_langs}. У вас указаны: {res_langs}. Можете ли вы подтянуть/подтвердить знание {req_langs}?"
-        )
+        "relocation": "Вакансия в {vac_city}, вы живёте в {res_city}. Готовы ли вы к переезду?",
+        "training": "У вас меньше опыта, чем требуется. Готовы ли вы пройти обучение или стажировку?",
+        "education": "Ваше образование немного отличается от требований. Можете пояснить, почему вы считаете себя подходящим?"
     }
 
     if llm_client is None:
-        # подставляем переменные
-        return templates.get(typ, "Можем уточнить: вы готовы к этому?").format(
-            vac_city=vacancy.get("город","не указан"),
-            res_city=resume.get("город","не указан"),
-            vac_exp=vacancy.get("опыт","?"),
-            res_exp=resume.get("опыт","?"),
-            res_sal=resume.get("зарплата","?"),
-            vac_sal=vacancy.get("зарплата","?"),
-            req_langs=", ".join(vacancy.get("языки", [])),
-            res_langs=", ".join(resume.get("языки", []))
+        return templates.get(gap["type"], "Можете уточнить этот момент?").format(
+            vac_city=vacancy["город"], res_city=resume["город"]
         )
 
-    # Если есть клиент LLM — мы можем сгенерировать более мягкий, персонализованный вопрос:
-    prompt = f"""Сгенерируй краткий вежливый вопрос к кандидату, на русском языке, не более 40 слов.
-    Повод: {gap['reason']}.
-    Вакансия: {vacancy.get('должность')} в {vacancy.get('город')}.
-    Резюме: {resume.get('должность')}, город {resume.get('город')}, опыт {resume.get('опыт')} лет.
-    """
-
-    # вызов llm_client должен вернуть строку; пример вызова зависит от API/клиента, который используешь.
+    prompt = f"""
+Ты HR-бот. Сформулируй короткий (до 40 слов) вопрос кандидату, чтобы уточнить следующее:
+{gap['reason']}
+Ответ должен начинаться с "Q:" и быть на русском языке.
+"""
     return llm_client.generate(prompt)
 
 
-# === Нормализация ответа кандидата (используем LLM кратко) ===
-def interpret_answer(answer_text: str, question_type: str, llm_client: Any = None) -> Dict:
-    """
-    Возвращает структуру с полями, которые помогут скору:
-     - accepted: True/False/partial
-     - confidence: 0..1 (оценка LLM или heuristics)
-     - raw: оригинальный ответ
-    Если нет llm_client — используем простые правила.
-    """
-    text = answer_text.strip().lower()
-    if llm_client is None:
-        # простая эвристика
-        yes_words = ["да", "готов", "готовы", "ok", "okey", "yes", "можно"]
-        no_words = ["нет", "не готов", "неготов", "не рассматриваю"]
-        if any(w in text for w in yes_words):
-            return {"accepted": True, "confidence": 0.9, "raw": answer_text}
-        if any(w in text for w in no_words):
-            return {"accepted": False, "confidence": 0.9, "raw": answer_text}
-        # иначе частичный
-        return {"accepted": "partial", "confidence": 0.5, "raw": answer_text}
-
-    # c LLM можно попросить классифицировать ответ и вернуть JSON
-    prompt = f"""Классифицируй кратко ответ кандидата на русский вопрос по типу "{question_type}".
-    Верни JSON: {{ "accepted": true/false/"partial", "confidence": 0..1, "notes": "..." }}
-    Ответ кандидата: \"\"\"{answer_text}\"\"\"
-    """
-    parsed = llm_client.generate_json(prompt)
-    return parsed
+# === Интерпретация ответов ===
+def interpret_answer(answer: str) -> bool:
+    answer = answer.lower()
+    if any(w in answer for w in ["да", "готов", "согласен", "можно", "ok", "yes"]):
+        return True
+    if any(w in answer for w in ["нет", "не готов", "не могу", "не согласен"]):
+        return False
+    return None
 
 
-# === Интеграция ответов в скор ===
-def integrate_followup_and_recompute(vacancy: Dict, resume: Dict, base_scoring: Dict, followups: List[Tuple[Dict, str]], embeddings_cache: Dict) -> Dict:
-    """
-    followups: список (gap, answer_text)
-    возвращает обновлённый score и объяснения
-    """
-    # копируем детали
-    details = base_scoring["details"].copy()
-    extra_bonus = 0.0
-
-    for gap, answer in followups:
-        interp = interpret_answer(answer, gap["type"], llm_client=None)  # можно поставить llm_client
-        if gap["type"] == "relocation":
-            if interp["accepted"] is True:
-                # если согласен переехать — даём бонус к city_match
-                details["city_match"] = 1.0
-                extra_bonus += 0.02  # небольшой бонус за готовность
-        if gap["type"] == "training":
-            if interp["accepted"] is True:
-                # кандидат готов учиться — считаем опыт как более высокий (например +20% от недостающего)
-                details["exp_ratio"] = min(1.0, details["exp_ratio"] + 0.2 * interp["confidence"])
-        if gap["type"] == "salary":
-            if interp["accepted"] is True:
-                # готов обсуждать — улучшаем salary_match
-                details["salary_match"] = min(1.0, details.get("salary_match", 0.0) + 0.25 * interp["confidence"])
-        if gap["type"] == "languages":
-            if interp["accepted"] is True:
-                # кандидат сказал, что подтянет язык — даём частичную поправку
-                details["langs_match"] = min(1.0, details.get("langs_match", 0.0) + 0.5 * interp["confidence"])
-
-    # пересчёт итогового скор, учитывая веса те же что и base
-    weights = {
-        "город": 0.1,
-        "опыт": 0.25,
-        "должность": 0.25,
-        "образование": 0.15,
-        "языки": 0.1,
-        "зарплата": 0.1,
-        "занятость": 0.05
-    }
-    # берем job_sim и edu_sim из base_scoring (они не менялись)
-    job_sim = base_scoring["details"]["job_sim"]
-    edu_sim = base_scoring["details"]["edu_sim"]
+# === Пересчёт итогового результата ===
+def integrate_followup(vacancy, resume, scoring, followups):
+    details = scoring["details"].copy()
+    for f in followups:
+        accepted = interpret_answer(f["answer"])
+        if accepted and f["gap"]["type"] == "relocation":
+            details["city_match"] = 1.0
+        elif accepted and f["gap"]["type"] == "training":
+            details["exp_ratio"] = min(1.0, details["exp_ratio"] + 0.2)
+        elif accepted and f["gap"]["type"] == "education":
+            details["edu_sim"] = min(1.0, details["edu_sim"] + 0.15)
 
     new_score = (
-        details["city_match"] * weights["город"] +
-        details["exp_ratio"] * weights["опыт"] +
-        job_sim * weights["должность"] +
-        edu_sim * weights["образование"] +
-        details["langs_match"] * weights["языки"] +
-        details.get("salary_match", base_scoring["details"].get("salary_match", 1.0)) * weights["зарплата"] +
-        details["employment_match"] * weights["занятость"]
-    ) * 100 + extra_bonus * 100
+        details["city_match"] * 0.1 +
+        details["exp_ratio"] * 0.25 +
+        details["job_sim"] * 0.25 +
+        details["edu_sim"] * 0.15 +
+        details["langs_match"] * 0.1 +
+        details["salary_match"] * 0.1 +
+        details["employment_match"] * 0.05
+    ) * 100
 
-    return {
-        "updated_score": round(new_score, 2),
-        "updated_details": details
-    }
+    return round(new_score, 2)
 
 
-# === Пример workflow ===
+# === Основной сценарий ===
 if __name__ == "__main__":
     vacancy = {
-        "город": "Алматы",
-        "опыт": 3,
-        "должность": "Python разработчик",
-        "образование": "высшее техническое",
+        "город": "Астане",
+        "опыт": 5,
+        "должность": "junior python developer",
+        "образование": "высшее специальное",
         "языки": ["английский", "русский"],
-        "зарплата": 600000,
-        "занятость": "полная",
-        "remote_allowed": False
+        "зарплата": 800000,
+        "занятость": "частичное"
     }
 
     resume = {
@@ -318,30 +217,24 @@ if __name__ == "__main__":
         "занятость": "полная"
     }
 
+    llm = MistralClient()
+
     base = base_similarity_score(vacancy, resume)
-    print("Base:", base)
+    print(f"\n📊 Базовая релевантность: {base['base_score']}%\n")
 
     gaps = detect_gaps(vacancy, resume, base)
-    print("Gaps to ask:", gaps)
+    if not gaps:
+        print("✅ Несоответствий не найдено, кандидат полностью подходит.")
+    else:
+        print("⚠️ Обнаружены моменты, требующие уточнения:\n")
 
-    # генерируем вопросы (без LLM, по шаблону)
-    questions = [generate_followup_question(g, vacancy, resume) for g in gaps]
-    for q in questions:
-        print("Q:", q)
-
-    # <-- здесь в реальной системе мы отправляем вопросы пользователю и получаем ответы -->
-    # для примера задаём ответы вручную:
-    answers = [
-        ("relocation", "Да, готов переехать через 2 месяца"),
-        ("training", "Да, готов учиться и пройти стажировку")
-    ]
-
-    # мапим ответы на gaps
     followups = []
-    for g in gaps:
-        # находим ответ по типу (в примере)
-        ans = next((a for a in answers if a[0] == g["type"]), ("", ""))[1]
-        followups.append((g, ans))
+    for gap in gaps:
+        question = generate_followup_question(gap, vacancy, resume, llm)
+        print("🤖", question)
+        answer = input("🧑 Ваш ответ: ").strip()
+        followups.append({"gap": gap, "answer": answer})
 
-    updated = integrate_followup_and_recompute(vacancy, resume, base, followups, base["embeddings_cache"])
-    print("Updated:", updated)
+    if followups:
+        final_score = integrate_followup(vacancy, resume, base, followups)
+        print(f"\n✅ Итоговая оценка после уточнений: {final_score}%")
