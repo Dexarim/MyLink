@@ -1,46 +1,50 @@
-from llm_client import MistralClient
+# main.py (опционально — для ручных проверок в консоли)
+import os
+from llm_client import LLMClient
 from scoring import base_similarity_score, detect_gaps
 from qa_logic import generate_followup_question, integrate_followup
 
-vacancy = {
-        "город": "Астанa",
+if __name__ == "__main__":
+    vacancy = {
+        "город": "Астана",
         "опыт": 5,
-        "должность": "junior python developer",
+        "должность": "Python developer",
         "образование": "высшее специальное",
         "языки": ["английский"],
         "зарплата": 800000,
-        "занятость": "частичное"
+        "занятость": "полная",
+        "skills": ["python", "fastapi", "numpy"]
     }
 
-resume = {
-        "город": "Астанa",
+    resume = {
+        "город": "Караганда",
         "опыт": 1,
         "должность": "junior python developer",
         "образование": "бакалавр компьютерных наук",
         "языки": ["русский"],
         "зарплата": 500000,
-        "занятость": "полная"
+        "занятость": "полная",
+        "skills": ["python", "django", "sql"],
+        "мотивация": "Хочу развиваться в Python backend"
     }
 
-if __name__ == "__main__":
-    llm = MistralClient()
+    llm = LLMClient(provider=os.getenv("LLM_PROVIDER","gemini"),
+                    model=os.getenv("LLM_MODEL","gemini-1.5-flash"),
+                    api_key=os.getenv("GOOGLE_API_KEY"))
 
     base = base_similarity_score(vacancy, resume)
-    print(f"\n📊 Базовая релевантность: {base['base_score']}%\n")
+    print("Base:", base)
 
     gaps = detect_gaps(vacancy, resume, base)
-    if not gaps:
-        print("✅ Несоответствий не найдено, кандидат полностью подходит.")
-    else:
-        print("⚠️ Обнаружены моменты, требующие уточнения:\n")
+    print("Gaps:", gaps)
 
     followups = []
-    for gap in gaps:
-        question = generate_followup_question(gap, vacancy, resume, llm)
-        print("🤖", question)
-        answer = input("🧑 Ваш ответ: ").strip()
-        followups.append({"gap": gap, "answer": answer})
+    for g in gaps:
+        q = generate_followup_question(g, vacancy, resume, llm)
+        print("🤖", q)
+        ans = input("🧑 Ваш ответ: ").strip()
+        followups.append({"gap": g, "answer": ans})
 
     if followups:
-        final_score = integrate_followup(vacancy, resume, base, followups)
-        print(f"\n✅ Итоговая оценка после уточнений: {final_score}%")
+        final = integrate_followup(vacancy, resume, base, followups)
+        print("✅ Итоговая оценка:", final)
