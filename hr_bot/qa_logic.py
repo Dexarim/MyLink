@@ -16,31 +16,31 @@ def generate_followup_question(gap: Dict, vacancy: Dict, resume: Dict, llm_clien
         "relocation_3": "Если потребуется, сможете ли переехать в {vac_city}?",
         "relocation_4": "Планируете ли переезд в сторону {vac_city} в ближайшее время?",
 
-        # Опыт
-        "training_1": "Ваш опыт ниже требуемого. Готовы ли пройти обучение/стажировку для адаптации?",
+        # experience
+        "training_1": "Ваш experience ниже требуемого. Готовы ли пройти обучение/стажировку для адаптации?",
         "training_2": "Если компания предложит обучение перед стартом — согласились бы?",
         "training_3": "Готовы развить недостающие навыки через наставничество?",
-        "training_4": "Готовы компенсировать недостаток опыта за счёт практики и обучения?",
+        "training_4": "Готовы компенсировать недостаток experienceа за счёт практики и обучения?",
 
-        # Образование
-        "education_1": "Ваше образование отличается от требований. Как ваш опыт компенсирует это?",
+        # education
+        "education_1": "Ваше education отличается от требований. Как ваш experience компенсирует это?",
         "education_2": "Есть ли курсы/практика, соответствующие требованиям вакансии?",
         "education_3": "Вы указали '{edu_res}', вакансия предполагает '{edu_vac}'. Как ваш бэкграунд помогает в роли?",
         "education_4": "Какие курсы/сертификаты закрывают требуемые компетенции?",
 
-        # Зарплата
+        # salary
         "salary_1": "По вакансии предлагается {vac_salary}₸. Устраивает ли вас этот уровень дохода?",
         "salary_2": "Ваши ожидания — {res_salary}₸, вакансия — {vac_salary}₸. Готовы рассмотреть предложение?",
         "salary_3": "Как вы оцениваете уровень {vac_salary}₸?",
         "salary_4": "Если предложат {vac_salary}₸ — будет ли это приемлемо?",
 
-        # Языки
-        "language_1": "Вакансии нужны языки: {langs_vac}. Насколько уверенно вы ими владеете?",
-        "language_2": "У вас указано {langs_res}, требуется {langs_vac}. Есть ли опыт работы с этими языками?",
+        # languages
+        "language_1": "Вакансии нужны languages: {langs_vac}. Насколько уверенно вы ими владеете?",
+        "language_2": "У вас указано {langs_res}, требуется {langs_vac}. Есть ли experience работы с этими языками?",
         "language_3": "Насколько комфортно общаетесь на {missing_langs}?",
         "language_4": "Готовы ли подтянуть уровень языка {missing_langs}, если потребуется?",
 
-        # Занятость
+        # busyness
         "employment_1": "Вакансия предполагает {vac_type}, у вас {res_type}. Подходит ли формат?",
         "employment_2": "Комфортно ли вам работать в формате {vac_type}?",
         "employment_3": "Рассматриваете смену формата на {vac_type}?",
@@ -58,17 +58,17 @@ def generate_followup_question(gap: Dict, vacancy: Dict, resume: Dict, llm_clien
     if slot_templates:
         t = random.choice(slot_templates)
         return t.format(
-            vac_city=vacancy.get("город",""),
-            res_city=resume.get("город",""),
-            vac_salary=vacancy.get("зарплата",""),
-            res_salary=resume.get("зарплата",""),
-            langs_vac=", ".join(vacancy.get("языки",[])) or "требуемые языки",
-            langs_res=", ".join(resume.get("языки",[])) or "указанные языки",
-            missing_langs=gap.get("missing_langs","указанные языки"),
-            vac_type=vacancy.get("занятость",""),
-            res_type=resume.get("занятость",""),
-            edu_vac=vacancy.get("образование",""),
-            edu_res=resume.get("образование",""),
+            vac_city=vacancy.get("city",""),
+            res_city=resume.get("city",""),
+            vac_salary=vacancy.get("salary",""),
+            res_salary=resume.get("salary",""),
+            langs_vac=", ".join(vacancy.get("languages",[])) or "требуемые languages",
+            langs_res=", ".join(resume.get("languages",[])) or "указанные languages",
+            missing_langs=gap.get("missing_langs","указанные languages"),
+            vac_type=vacancy.get("busyness",""),
+            res_type=resume.get("busyness",""),
+            edu_vac=vacancy.get("education",""),
+            edu_res=resume.get("education",""),
         )
 
     if llm_client:

@@ -6,24 +6,24 @@ from qa_logic import generate_followup_question, integrate_followup
 
 if __name__ == "__main__":
     vacancy = {
-        "город": "Астана",
-        "опыт": 5,
-        "должность": "Python developer",
-        "образование": "высшее специальное",
-        "языки": ["английский"],
-        "зарплата": 800000,
-        "занятость": "полная",
+        "city": "Астана",
+        "experience": 5,
+        "post": "Python developer",
+        "education": "высшее специальное",
+        "languages": ["английский"],
+        "salary": 800000,
+        "busyness": "полная",
         "skills": ["python", "fastapi", "numpy"]
     }
 
     resume = {
-        "город": "Караганда",
-        "опыт": 1,
-        "должность": "junior python developer",
-        "образование": "бакалавр компьютерных наук",
-        "языки": ["русский"],
-        "зарплата": 500000,
-        "занятость": "полная",
+        "city": "Караганда",
+        "experience": 1,
+        "post": "junior python developer",
+        "education": "бакалавр компьютерных наук",
+        "languages": ["русский"],
+        "salary": 500000,
+        "busyness": "полная",
         "skills": ["python", "django", "sql"],
         "мотивация": "Хочу развиваться в Python backend"
     }

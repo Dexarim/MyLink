@@ -8,46 +8,46 @@ def base_similarity_score(vacancy: Dict, resume: Dict) -> Dict:
     Базовый скоринг (0..100) по основным полям.
     """
     weights = {
-        "город": 0.1,
-        "опыт": 0.25,
-        "должность": 0.25,
-        "образование": 0.15,
-        "языки": 0.1,
-        "зарплата": 0.1,
-        "занятость": 0.05
+        "city": 0.1,
+        "experience": 0.25,
+        "post": 0.25,
+        "education": 0.15,
+        "languages": 0.1,
+        "salary": 0.1,
+        "busyness": 0.05
     }
 
-    city_match = 1.0 if vacancy.get("город","").lower() == resume.get("город","").lower() else 0.0
+    city_match = 1.0 if vacancy.get("city","").lower() == resume.get("city","").lower() else 0.0
 
     exp_ratio = 1.0
-    vac_exp = safe_float(vacancy.get("опыт"), 0.0)
-    res_exp = safe_float(resume.get("опыт"), 0.0)
+    vac_exp = safe_float(vacancy.get("experience"), 0.0)
+    res_exp = safe_float(resume.get("experience"), 0.0)
     if vac_exp > 0:
         exp_ratio = min(res_exp / vac_exp, 1.0)
 
     salary_match = 1.0
-    res_salary = safe_float(resume.get("зарплата"), 0.0)
-    vac_salary = safe_float(vacancy.get("зарплата"), 0.0)
+    res_salary = safe_float(resume.get("salary"), 0.0)
+    vac_salary = safe_float(vacancy.get("salary"), 0.0)
     if res_salary and vac_salary:
         salary_match = 1.0 if res_salary <= vac_salary else max(0.0, vac_salary / res_salary)
 
-    job_sim = cosine_sim(embed_text(vacancy.get("должность","")), embed_text(resume.get("должность","")))
-    edu_sim = cosine_sim(embed_text(vacancy.get("образование","")), embed_text(resume.get("образование","")))
+    job_sim = cosine_sim(embed_text(vacancy.get("post","")), embed_text(resume.get("post","")))
+    edu_sim = cosine_sim(embed_text(vacancy.get("education","")), embed_text(resume.get("education","")))
 
-    vac_langs = set([l.lower() for l in vacancy.get("языки", [])])
-    res_langs = set([l.lower() for l in resume.get("языки", [])])
+    vac_langs = set([l.lower() for l in vacancy.get("languages", [])])
+    res_langs = set([l.lower() for l in resume.get("languages", [])])
     langs_match = len(vac_langs & res_langs) / len(vac_langs) if vac_langs else 1.0
 
-    employment_match = 1.0 if vacancy.get("занятость") == resume.get("занятость") else 0.0
+    employment_match = 1.0 if vacancy.get("busyness") == resume.get("busyness") else 0.0
 
     score = (
-        city_match * weights["город"] +
-        exp_ratio * weights["опыт"] +
-        job_sim * weights["должность"] +
-        edu_sim * weights["образование"] +
-        langs_match * weights["языки"] +
-        salary_match * weights["зарплата"] +
-        employment_match * weights["занятость"]
+        city_match * weights["city"] +
+        exp_ratio * weights["experience"] +
+        job_sim * weights["post"] +
+        edu_sim * weights["education"] +
+        langs_match * weights["languages"] +
+        salary_match * weights["salary"] +
+        employment_match * weights["busyness"]
     ) * 100.0
 
     return {
@@ -71,33 +71,33 @@ def detect_gaps(vacancy: Dict, resume: Dict, scoring: Dict):
     gaps = []
     d = scoring["details"]
 
-    # город
-    if vacancy.get("город") and resume.get("город") and vacancy["город"].lower() != resume["город"].lower():
-        gaps.append({"type": "relocation", "reason": f"вакансия в {vacancy['город']}, кандидат в {resume['город']}"})
+    # city
+    if vacancy.get("city") and resume.get("city") and vacancy["city"].lower() != resume["city"].lower():
+        gaps.append({"type": "relocation", "reason": f"вакансия в {vacancy['city']}, кандидат в {resume['city']}"})
 
-    # опыт
+    # experience
     if d["exp_ratio"] < 0.7:
-        gaps.append({"type": "training", "reason": "опыт меньше требуемого"})
+        gaps.append({"type": "training", "reason": "experience меньше требуемого"})
 
-    # образование
+    # education
     if d["edu_sim"] < 0.6:
-        gaps.append({"type": "education", "reason": "образование не полностью совпадает"})
+        gaps.append({"type": "education", "reason": "education не полностью совпадает"})
 
-    # зарплата
-    res_salary = safe_float(resume.get("зарплата"), 0)
-    vac_salary = safe_float(vacancy.get("зарплата"), 0)
+    # salary
+    res_salary = safe_float(resume.get("salary"), 0)
+    vac_salary = safe_float(vacancy.get("salary"), 0)
     if res_salary > 0 and vac_salary > 0 and res_salary > vac_salary * 1.15:
         gaps.append({"type": "salary", "reason": f"ожидания {res_salary} > оффер {vac_salary}"})
 
-    # языки
-    req_langs = set([l.lower() for l in vacancy.get("языки", [])])
-    res_langs = set([l.lower() for l in resume.get("языки", [])])
+    # languages
+    req_langs = set([l.lower() for l in vacancy.get("languages", [])])
+    res_langs = set([l.lower() for l in resume.get("languages", [])])
     missing = list(req_langs - res_langs)
     if missing:
-        gaps.append({"type": "language", "reason": f"отсутствуют требуемые языки: {', '.join(missing)}", "missing_langs": ", ".join(missing)})
+        gaps.append({"type": "language", "reason": f"отсутствуют требуемые languages: {', '.join(missing)}", "missing_langs": ", ".join(missing)})
 
-    # занятость
-    if vacancy.get("занятость") and resume.get("занятость") and vacancy["занятость"] != resume["занятость"]:
+    # busyness
+    if vacancy.get("busyness") and resume.get("busyness") and vacancy["busyness"] != resume["busyness"]:
         gaps.append({"type": "employment", "reason": "тип занятости не совпадает"})
 
     # мотивация (по желанию)
