@@ -141,10 +141,11 @@ services:
 
 ---
 
-## 🧑‍💻 Автор
+## 🧑‍💻 Авторы
 
 **ATOMIX TEAM**  
 💬 Telegram: [@Dexarim](https://t.me/Dexarim)
+              [@B_l_a_c_kS_u_n](https://t.me/B_l_a_c_kS_u_n)
 
 ---
 
