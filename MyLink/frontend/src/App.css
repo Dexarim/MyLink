@@ -1,0 +1,95 @@
+/* ---------- Dexarim HR Bot UI ---------- */
+
+body {
+  background: #f5f7fb;
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Контейнер приложения */
+.App {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+/* Заголовок вакансий */
+.App h2 {
+  font-size: 28px;
+  color: #1e293b;
+  margin-bottom: 24px;
+}
+
+/* Карточки вакансий */
+.vacancy-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 20px;
+  background: white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.vacancy-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+/* Кнопка "Откликнуться" */
+.vacancy-card button {
+  background: linear-gradient(90deg, #3b82f6, #2563eb);
+  border: none;
+  color: white;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 12px;
+  transition: background 0.3s ease;
+}
+
+.vacancy-card button:hover {
+  background: linear-gradient(90deg, #2563eb, #1d4ed8);
+}
+
+/* SmartBot кнопка */
+smartbot-widget::part(bot-button) {
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3);
+}
+
+/* Анимация появления виджета */
+@keyframes widget-fade-in {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+smartbot-widget {
+  animation: widget-fade-in 0.5s ease-out forwards;
+}
+
+/* ---------- Мелкие улучшения ---------- */
+
+.vacancy-card h4 {
+  margin: 0;
+  font-size: 18px;
+  color: #0f172a;
+}
+
+.vacancy-card p {
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.4;
+}
+
+.App-footer {
+  text-align: center;
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 50px;
+}
