@@ -25,7 +25,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # ---------------------- МОДЕЛИ ----------------------
 class Vacancy(BaseModel):
     city: str
@@ -74,7 +73,7 @@ async def index():
 @app.post("/analyze/base")
 async def analyze_base(vacancy: Vacancy, resume: Resume):
     """
-    Шаг 1️⃣ — базовая оценка схожести и определение несоответствий.
+    Базовая оценка схожести и определение несоответствий.
     """
     try:
         base = base_similarity_score(vacancy.dict(), resume.dict())
@@ -87,7 +86,7 @@ async def analyze_base(vacancy: Vacancy, resume: Resume):
 @app.post("/analyze/followup")
 async def analyze_followup(vacancy: Vacancy, resume: Resume):
     """
-    Шаг 2️⃣ — генерация уточняющих вопросов по найденным несовпадениям.
+    Генерация уточняющих вопросов по найденным несовпадениям.
     """
     try:
         base = base_similarity_score(vacancy.dict(), resume.dict())
@@ -110,7 +109,7 @@ async def analyze_followup(vacancy: Vacancy, resume: Resume):
 @app.post("/analyze/final")
 async def analyze_final(vacancy: Vacancy, resume: Resume, followups: List[FollowupAnswer]):
     """
-    Шаг 3️⃣ — обработка ответов кандидата и пересчёт итогового скора.
+    Обработка ответов кандидата и пересчёт итогового скора.
     """
     try:
         base = base_similarity_score(vacancy.dict(), resume.dict())
