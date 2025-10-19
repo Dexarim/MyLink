@@ -1,8 +1,9 @@
-/* ---------- Dexarim HR Bot UI ---------- */
-
 body {
   background: #f5f7fb;
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  margin: 0;
+  padding: 0;
+  color: #1e293b;
 }
 
 /* Контейнер приложения */
@@ -10,13 +11,82 @@ body {
   max-width: 800px;
   margin: 0 auto;
   padding: 40px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
-/* Заголовок вакансий */
-.App h2 {
-  font-size: 28px;
-  color: #1e293b;
-  margin-bottom: 24px;
+/* Заголовок */
+.App h2,
+.App h3,
+.App h4 {
+  color: #0f172a;
+  margin: 0;
+}
+
+/* Бургер-меню */
+.burger-menu {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.burger-menu button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #1e40af;
+  font-size: 22px;
+  transition: transform 0.2s ease;
+}
+
+.burger-menu button:hover {
+  transform: scale(1.1);
+}
+
+/* Поповер (список резюме) */
+.resume-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px;
+}
+
+.resume-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.resume-card:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  transform: translateX(2px);
+}
+
+.resume-card.active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+/* Аватар (инициалы кандидата) */
+.resume-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #3b82f6;
+  color: white;
+  font-weight: 600;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Карточки вакансий */
@@ -45,11 +115,12 @@ body {
   cursor: pointer;
   width: 100%;
   margin-top: 12px;
-  transition: background 0.3s ease;
+  transition: background 0.3s ease, transform 0.1s ease;
 }
 
 .vacancy-card button:hover {
   background: linear-gradient(90deg, #2563eb, #1d4ed8);
+  transform: translateY(-2px);
 }
 
 /* SmartBot кнопка */
@@ -73,7 +144,7 @@ smartbot-widget {
   animation: widget-fade-in 0.5s ease-out forwards;
 }
 
-/* ---------- Мелкие улучшения ---------- */
+/* ---------- Дополнительные улучшения ---------- */
 
 .vacancy-card h4 {
   margin: 0;
@@ -84,7 +155,8 @@ smartbot-widget {
 .vacancy-card p {
   font-size: 14px;
   color: #475569;
-  line-height: 1.4;
+  line-height: 1.5;
+  margin: 8px 0;
 }
 
 .App-footer {
