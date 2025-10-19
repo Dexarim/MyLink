@@ -6,26 +6,37 @@ from qa_logic import generate_followup_question, integrate_followup
 
 if __name__ == "__main__":
     vacancy = {
-        "city": "Кинишма",
-        "experience": 98,
-        "post": "Электрик-наладчик",
-        "education": "Диплом о среднем профессиональном образовании",
-        "languages": ["русский"],
-        "salary": 1000000,
+        "city": "Москва",
+        "experience": 2,
+        "post": "Frontend-разработчик",
+        "education": "Бакалавр компьютерных наук",
+        "languages": ["русский", "английский"],
+        "salary": 700000,
         "busyness": "полная",
-        "skills": ["Сварщик", "Пайка", "Чтение чертежей"]
+          "skills": [
+            "React",
+            "JavaScript",
+            "TypeScript",
+            "REST API"
+        ],
     }
 
     resume = {
-        "city": "Караганда",
-        "experience": 1,
-        "post": "junior python developer",
-        "education": "бакалавр компьютерных наук",
+        "city": "Казань",
+        "experience": 7,
+        "post": "Сварщик",
+        "education": "Среднее профессиональное, Казанский техникум машиностроения",
         "languages": ["русский"],
-        "salary": 500000,
+        "salary": 450000,
         "busyness": "полная",
-        "skills": ["python", "django", "sql"],
-        "мотивация": "Хочу развиваться в Python backend"
+        "skills": [
+    "Электросварка",
+    "Аргонная сварка",
+    "Чтение чертежей",
+    "Металлоконструкции",
+    "Техническое обслуживание оборудования"
+    ],
+  "motivation": "Люблю работать руками, ценю качество и точность. Хочу развиваться в промышленной сварке и участвовать в крупных проектах."
     }
 
     llm = LLMClient(provider=os.getenv("LLM_PROVIDER","gemini"),
