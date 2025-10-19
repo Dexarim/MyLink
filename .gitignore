@@ -2,6 +2,7 @@
 venv/
 Docker/
 Site/
+frontend/
 
 # Игнорируем файл с переменными окружения
 .env
